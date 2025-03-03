@@ -22,6 +22,18 @@ async fn update(book: &Book, pool: &sqlx::PgPool) -> Result<(), Box<dyn Error>> 
 
     Ok(())
 }
+async fn delete(book:&Book,pool:&sqlx::PgPool) -> Result<(),Box<dyn Error>>{
+    let query = "DELETE from book WHERE title = $1 AND author = $2 AND isbn = $3";
+
+    sqlx::query(query)
+        .bind(&book.title)
+        .bind(&book.author)
+        .bind(&book.isbn)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
 
 async fn create(book: &Book, pool: &sqlx::PgPool) -> Result<(), Box<dyn Error>> {
     let query = "INSERT INTO book (title, author, isbn) VALUES ($1, $2, $3)";
@@ -58,14 +70,35 @@ async fn get_all_endpoint(pool: web::Data<sqlx::PgPool>) -> impl Responder {
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
-async fn create_endpoint(book: web::Json<Book>, pool : web::Data<sqlx::PgPool>) -> impl Responder{
-    create(&book, pool.get_ref()).await;
-    HttpResponse::Ok()
+
+async fn create_endpoint(books: web::Json<Vec<Book>>, pool : web::Data<sqlx::PgPool>) -> impl Responder{
+    
+    for book in books.iter(){
+        match create(&book, pool.get_ref()).await{
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().finish(),
+        }
+    }
+    HttpResponse::Ok().finish()
+    
+    
+}
+
+async fn delete_endpoint(books: web::Json<Vec<Book>>, pool: web::Data<sqlx::PgPool>) -> impl Responder{
+
+    for book in books.iter(){
+        match delete(&book, pool.get_ref()).await{
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().finish()
+        }
+    }
+
+    HttpResponse::Ok().finish()
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let url = "postgres://postgres@localhost:5432/bookstore";
+    let url = "postgres://postgres:45GtO723@localhost:5432/bookstore";
 
     let pool = sqlx::postgres::PgPool::connect(url).await?;
     println!(">>>SERVER RUNNING");
@@ -76,6 +109,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 web::scope("/books")
                     .route("/", web::get().to(get_all_endpoint))
                     .route("/post", web::post().to(create_endpoint))
+                    .route("/delete",web::delete().to(delete_endpoint))
+
             )
     })
     .bind(("0.0.0.0", 8080))?
