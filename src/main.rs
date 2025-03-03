@@ -1,9 +1,9 @@
 use std::error::Error;
 use actix_web::{web::{self, get, method}, App, HttpResponse, HttpServer, Responder};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Book {
     pub title: String,
     pub author: String,
@@ -58,10 +58,14 @@ async fn get_all_endpoint(pool: web::Data<sqlx::PgPool>) -> impl Responder {
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
+async fn create_endpoint(book: web::Json<Book>, pool : web::Data<sqlx::PgPool>) -> impl Responder{
+    create(&book, pool.get_ref()).await;
+    HttpResponse::Ok()
+}
 
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let url = "postgres://postgres:supersecretpassword@localhost:5432/bookstore";
+    let url = "postgres://postgres@localhost:5432/bookstore";
 
     let pool = sqlx::postgres::PgPool::connect(url).await?;
     println!(">>>SERVER RUNNING");
@@ -71,6 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .service(
                 web::scope("/books")
                     .route("/", web::get().to(get_all_endpoint))
+                    .route("/post", web::post().to(create_endpoint))
             )
     })
     .bind(("0.0.0.0", 8080))?
